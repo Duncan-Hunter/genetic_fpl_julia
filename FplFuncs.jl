@@ -1,4 +1,36 @@
-function generate_formation()
+module FplFuncs
+
+using DataFrames
+using StatsBase
+using Statistics
+
+
+function fpl_get_dicts(df_players::DataFrame)
+    id_to_player = Dict()
+    for (k, v) in zip(df_players.id, df_players.second_name)
+        id_to_player[k] = v
+    end
+    id_to_cost = Dict()
+    for (k, v) in zip(df_players.id, df_players.now_cost)
+        id_to_cost[k] = v
+    end
+    id_to_element_type = Dict()
+    for (k, v) in zip(df_players.id, df_players.element_type)
+        id_to_element_type[k] = v
+    end
+    id_to_team = Dict()
+    for (k, v) in zip(df_players.id, df_players.team)
+        id_to_team[k] = v
+    end
+    id_to_fitness = Dict()
+    for (k, v) in zip(df_players.id, df_players.fitness)
+        id_to_fitness[k] = v
+    end
+    return id_to_player, id_to_cost, id_to_element_type, id_to_team, id_to_fitness
+end
+
+
+function fpl_generate_formation()
     """Generates a random formation"""
     n_keepers = 1
     n_defenders = rand(3:5)
@@ -13,8 +45,13 @@ function generate_formation()
 end
 
 
-function generate_squad_initial(goalkeepers,)
+function fpl_generate_squad_initial(df_players::DataFrame)
     """Generates a random squad"""
+    goalkeepers = df_players[df_players.element_type .== 1, :]
+    defenders = df_players[df_players.element_type .== 2, :]
+    midfielders = df_players[df_players.element_type .== 3, :]
+    attackers = df_players[df_players.element_type .== 4, :]
+
     gk_ids = sample(goalkeepers.id, 2, replace=false)
     defender_ids = sample(defenders.id, 5, replace=false)
     midfielder_ids = sample(midfielders.id, 5, replace=false)
@@ -24,9 +61,10 @@ function generate_squad_initial(goalkeepers,)
 end
 
 
-function generate_team_from_squad(squad_vector)
+function fpl_generate_team_from_squad(squad_vector,
+    id_to_element_type::Dict{Any,Any})
     """Sorts a team into the first 11 parts"""
-    gk, d, m, a = generate_formation()
+    gk, d, m, a = fpl_generate_formation()
     team_gks = sample(squad_vector[1:2], 1)
     team_defs = sample(squad_vector[3:7], d, replace=false)
     team_mids = sample(squad_vector[8:12], m, replace=false)
@@ -65,18 +103,15 @@ function generate_team_from_squad(squad_vector)
 end
 
 
-function print_squad_names(squad_vector)
+function fpl_print_squad_names(squad_vector, id_to_player::Dict{Any, Any})
     for i in squad_vector
         println(i, " ", id_to_player[i])
     end
 end
 
 
-function squad_cost(squad_vector)
+function fpl_squad_cost(squad_vector, id_to_cost::Dict{Any, Any})
     sum = 0
-    if 0 in squad_vector
-        println(squad_vector)
-    end
     for id in squad_vector
         sum += id_to_cost[id]
     end
@@ -84,7 +119,7 @@ function squad_cost(squad_vector)
 end
 
 
-function team_fitness(squad_vector)
+function fpl_team_fitness(squad_vector, id_to_fitness::Dict{Any, Any})
     fit = 0
     for id in squad_vector[1:11]
         fit += id_to_fitness[id]
@@ -97,7 +132,7 @@ function team_fitness(squad_vector)
 end
 
 
-function most_from_one_squad(squad_vector)
+function fpl_most_from_one_squad(squad_vector, id_to_team::Dict{Any, Any})
     teams = zero(squad_vector)
     for (i, id) in enumerate(squad_vector)
         teams[i] = id_to_team[id]
@@ -115,7 +150,7 @@ function most_from_one_squad(squad_vector)
 end
 
 
-function validate_player_types(squad_vector)
+function fpl_validate_player_types(squad_vector, id_to_element_type::Dict{Any, Any})
     types = zeros(size(squad_vector, 1))
     for (i, id) in enumerate(squad_vector)
         types[i] = id_to_element_type[id]
@@ -163,7 +198,7 @@ function validate_player_types(squad_vector)
 end
 
 
-function players_unique(squad_vector)
+function fpl_players_unique(squad_vector)
     found = []
     for id in squad_vector
         if id in found
@@ -176,7 +211,7 @@ function players_unique(squad_vector)
 end
 
 
-function get_player_types(squad_vector)
+function fpl_get_player_types(squad_vector, id_to_element_type::Dict{Any, Any})
     types = zeros(size(squad_vector, 1))
     for (i, id) in enumerate(squad_vector)
         types[i] = id_to_element_type[id]
@@ -199,45 +234,74 @@ function get_player_types(squad_vector)
 end
 
 
-function print_player_types(squad_vector::Array{Int64, 1})
-    counts = get_player_types(squad_vector)
+function fpl_print_player_types(squad_vector::Array{Int64, 1}, id_to_element_type::Dict{Any, Any})
+    counts = fpl_get_player_types(squad_vector, id_to_element_type)
     println(counts)
 end
 
 
-function validate_squad(squad_vector::Array{Int64,1})
-    if squad_cost(squad_vector) <= 100
+function fpl_validate_squad(squad_vector::Array{Int64,1},
+    id_to_cost::Dict{Any, Any},
+    id_to_team::Dict{Any, Any},
+    id_to_element_type::Dict{Any, Any}
+    )
+    if fpl_squad_cost(squad_vector, id_to_cost) <= 100
         cost_flag = true
     else
         cost_flag = false
     end
-    if most_from_one_squad(squad_vector) <= 3
+    if fpl_most_from_one_squad(squad_vector, id_to_team) <= 3
         team_flag = true
     else
         team_flag = false
     end
-    types_flag = validate_player_types(squad_vector)
-    players_unique_flag = players_unique(squad_vector)        
+    types_flag = fpl_validate_player_types(squad_vector, id_to_element_type)
+    players_unique_flag = fpl_players_unique(squad_vector)        
     
     valid = cost_flag * team_flag * types_flag * players_unique_flag
     return valid
 end
 
 
-function validate_squad(squad_vector::Array{Int64,1}, chosen_team::Array{Int64, 1}, n_changes::Int)
-    valid_flag = validate_squad(squad_vector)
-    changes_flag = check_changes(chosen_team, squad_vector, n_changes)
+function fpl_validate_squad(squad_vector::Array{Int64,1},
+                            id_to_cost::Dict{Any, Any},
+                            id_to_team::Dict{Any, Any},
+                            id_to_element_type::Dict{Any, Any},
+                            chosen_team::Array{Int64, 1},
+                            n_changes::Int)
+    valid_flag = fpl_validate_squad(squad_vector, id_to_cost, id_to_team, id_to_element_type)
+    changes_flag = fpl_check_changes(chosen_team, squad_vector, n_changes)
     valid = valid_flag * changes_flag
     return valid
 end
 
 
-function iterate_valid_team()
+function fpl_check_changes(chosen_team, new_vector, n_changes=1::Int)
+    counter = 0
+    for id in new_vector
+        if id in chosen_team
+            counter += 1
+        end
+    end
+    # If we find 11 players, rem is 4, 4 changes
+    changes = 15 - counter
+    if changes > n_changes
+        return false
+    else
+        return true
+    end
+end
+
+
+function fpl_iterate_valid_team(df_players::DataFrame,
+                                id_to_element_type::Dict{Any, Any},
+                                id_to_cost::Dict{Any, Any},
+                                id_to_team::Dict{Any, Any})
     valid = 0
     while valid == 0
-        squad = generate_squad_initial()
-        squad = generate_team_from_squad(squad)
-        valid = validate_squad(squad)
+        squad = fpl_generate_squad_initial(df_players)
+        squad = fpl_generate_team_from_squad(squad, id_to_element_type)
+        valid = fpl_validate_squad(squad, id_to_cost, id_to_team, id_to_element_type)
         if valid == 1
             return squad
         end
@@ -245,7 +309,7 @@ function iterate_valid_team()
 end
 
 
-function select_best_rows(pool, fitnesses, n_rows)
+function fpl_select_best_rows(pool, fitnesses, n_rows)
     weights = fitnesses / sum(fitnesses)
     selected = sample(collect(1:size(pool, 1)), Weights(weights), n_rows, replace=true)
     selected_rows = pool[selected, :]
@@ -254,14 +318,14 @@ function select_best_rows(pool, fitnesses, n_rows)
 end
 
 
-function breed(parent1, parent2, parent3)
+function fpl_breed(parent1, parent2, parent3)
     c1, c2 = sort(sample(collect(2:14), 2))
     new = vcat(parent1[1:c1], parent2[c1+1:c2], parent3[c2+1:15])
     return new
 end
 
 
-function subs_swap(squad_vector::Array{Int64, 1})
+function fpl_subs_swap(squad_vector::Array{Int64, 1})
     gk_chance = rand()
     if gk_chance < 0.1
         tmp = squad_vector[1]
@@ -281,7 +345,11 @@ function subs_swap(squad_vector::Array{Int64, 1})
 end
 
 
-function mutate(squad)
+function fpl_mutate(squad,
+    df_players::DataFrame,
+    id_to_element_type::Dict{Any, Any}
+    )
+    goalkeepers = df_players[df_players.element_type .== 1, :]
     n_to_mutate = sample(1:3)
     pos_to_mutate = sample(collect(1:15), n_to_mutate, replace=false)
     for ind in pos_to_mutate
@@ -289,14 +357,19 @@ function mutate(squad)
         if id_to_element_type[id] == 1
             squad[ind] = sample(goalkeepers.id)
         else
-            squad[ind] = sample(df.id)
+            squad[ind] = sample(df_players.id)
         end
     end
     return squad
 end
 
 
-function iterate_breed(parents)
+function fpl_iterate_breed(parents,
+    df_players::DataFrame,
+    id_to_cost::Dict{Any, Any},
+    id_to_team::Dict{Any, Any},
+    id_to_element_type::Dict{Any, Any}
+    )
     valid = 0
     its = 0
     while valid == 0 & its < 1000
@@ -304,16 +377,23 @@ function iterate_breed(parents)
         p1 = parents[parent_inds[1], :]
         p2 = parents[parent_inds[2], :]
         p3 = parents[parent_inds[3], :]
-        new_squad = breed(p1, p2, p3)
+        new_squad = fpl_breed(p1, p2, p3)
         mutate_chance = rand()
         if mutate_chance < 0.3
-            new_squad = mutate(new_squad)
+            new_squad = fpl_mutate(new_squad,
+            df_players,
+            id_to_element_type
+            )
         end
         sub_chance = rand()
         if sub_chance < 0.3
-            new_squad = subs_swap(new_squad)
+            new_squad = fpl_subs_swap(new_squad)
         end
-        valid = validate_squad(new_squad)
+        valid = fpl_validate_squad(new_squad,
+        id_to_cost,
+        id_to_team,
+        id_to_element_type
+        )
         if valid
             return new_squad
         end
@@ -323,7 +403,14 @@ function iterate_breed(parents)
 end
 
 
-function iterate_breed(parents, chosen_team::Array{Int64,1}, n_changes::Int)
+function fpl_iterate_breed(parents,
+    df_players::DataFrame,
+    id_to_cost::Dict{Any, Any},
+    id_to_team::Dict{Any, Any},
+    id_to_element_type::Dict{Any, Any},
+    chosen_team::Array{Int64,1},
+    n_changes::Int
+    )
     valid = 0
     its = 0
     while valid == 0 & its < 1000
@@ -331,16 +418,25 @@ function iterate_breed(parents, chosen_team::Array{Int64,1}, n_changes::Int)
         p1 = parents[parent_inds[1], :]
         p2 = parents[parent_inds[2], :]
         p3 = parents[parent_inds[3], :]
-        new_squad = breed(p1, p2, p3)
+        new_squad = fpl_breed(p1, p2, p3)
         mutate_chance = rand()
         if mutate_chance < 0.3
-            new_squad = mutate(new_squad)
+            new_squad = fpl_mutate(new_squad,
+            df_players,
+            id_to_element_type
+            )
         end
         sub_chance = rand()
         if sub_chance < 0.3
-            new_squad = subs_swap(new_squad)
+            new_squad = fpl_subs_swap(new_squad)
         end
-        valid = validate_squad(new_squad, chosen_team, n_changes)
+        valid = fpl_validate_squad(new_squad,
+        id_to_cost,
+        id_to_team,
+        id_to_element_type,
+        chosen_team,
+        n_changes
+        )
         if valid
             return new_squad
         end
@@ -349,4 +445,4 @@ function iterate_breed(parents, chosen_team::Array{Int64,1}, n_changes::Int)
     error("Max iterations exceeded")
 end
 
-
+end
